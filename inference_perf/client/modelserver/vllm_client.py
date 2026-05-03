@@ -61,17 +61,20 @@ class vLLMModelServerClient(openAIModelServerClient):
 
     def get_prometheus_metric_metadata(self) -> PrometheusMetricMetadata:
         return PrometheusMetricMetadata(
-            # Queue Length
+            # Queue Length: peak cluster-wide pending depth across the run.
+            # Use sum_max to aggregate across replicas (per-pod "mean" hides
+            # bursts; cluster-wide peak answers "did we ever queue up?").
             avg_queue_length=ModelServerPrometheusMetric(
                 "vllm:num_requests_waiting",
-                "mean",
+                "sum_max",
                 "gauge",
                 self.metric_filters,
             ),
-            # Running Requests
+            # Running Requests: cluster-wide concurrent in-flight count.
+            # Use sum_mean to aggregate across replicas.
             avg_num_requests_running=ModelServerPrometheusMetric(
                 "vllm:num_requests_running",
-                "mean",
+                "sum_mean",
                 "gauge",
                 self.metric_filters,
             ),
@@ -222,10 +225,13 @@ class vLLMModelServerClient(openAIModelServerClient):
                 "histogram",
                 self.metric_filters,
             ),
-            # KV Cache Usage
+            # KV Cache Usage: per-pod fraction averaged across the cluster.
+            # Median/p90/p99 still report the per-series time-distribution
+            # (Prometheus result vector → first series), since cluster-wide
+            # quantile-of-quantile isn't well-defined in PromQL.
             avg_kv_cache_usage=ModelServerPrometheusMetric(
                 "vllm:kv_cache_usage_perc",
-                "mean",
+                "avg_mean",
                 "gauge",
                 self.metric_filters,
             ),
