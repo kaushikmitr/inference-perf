@@ -150,47 +150,49 @@ class vLLMModelServerClient(openAIModelServerClient):
                 "histogram",
                 self.metric_filters,
             ),
-            # Prompt Tokens (renamed in v1: prompt_tokens_total -> prompt_tokens)
+            # Prompt Tokens (vLLM v1+ exposes vllm:prompt_tokens_total)
             avg_prompt_tokens=ModelServerPrometheusMetric(
-                "vllm:prompt_tokens",
+                "vllm:prompt_tokens_total",
                 "mean",
                 "counter",
                 self.metric_filters,
             ),
             prompt_tokens_per_second=ModelServerPrometheusMetric(
-                "vllm:prompt_tokens",
+                "vllm:prompt_tokens_total",
                 "rate",
                 "counter",
                 self.metric_filters,
             ),
-            # Generation Tokens (renamed in v1: generation_tokens_total -> generation_tokens)
+            # Generation Tokens (vLLM v1+ exposes vllm:generation_tokens_total)
             avg_output_tokens=ModelServerPrometheusMetric(
-                "vllm:generation_tokens",
+                "vllm:generation_tokens_total",
                 "mean",
                 "counter",
                 self.metric_filters,
             ),
             output_tokens_per_second=ModelServerPrometheusMetric(
-                "vllm:generation_tokens",
+                "vllm:generation_tokens_total",
                 "rate",
                 "counter",
                 self.metric_filters,
             ),
-            # Total Requests (supports both vllm:request_success and vllm:request_success_total)
+            # Total Requests (vLLM v1+ exposes vllm:request_success_total; query the literal
+            # exposed name so this works on Google Managed Prometheus, which does not
+            # alias counter base names to their _total suffix)
             total_requests=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:request_success(_total)?"}',
+                "vllm:request_success_total",
                 "increase",
                 "counter",
                 self.metric_filters,
             ),
             requests_per_second=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:request_success(_total)?"}',
+                "vllm:request_success_total",
                 "rate",
                 "counter",
                 self.metric_filters,
             ),
             request_success_count=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:request_success(_total)?"}',
+                "vllm:request_success_total",
                 "increase",
                 "counter",
                 self.metric_filters,
@@ -246,7 +248,7 @@ class vLLMModelServerClient(openAIModelServerClient):
                 self.metric_filters,
             ),
             num_preemptions_total=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:num_preemptions(_total)?"}',
+                "vllm:num_preemptions_total",
                 "increase",
                 "counter",
                 self.metric_filters,
@@ -254,13 +256,13 @@ class vLLMModelServerClient(openAIModelServerClient):
             # Deprecated in v1 (KV cache offloading unused)
             num_requests_swapped=None,
             prefix_cache_hits=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:prefix_cache_hits(_total)?"}',
+                "vllm:prefix_cache_hits_total",
                 "increase",
                 "counter",
                 self.metric_filters,
             ),
             prefix_cache_queries=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:prefix_cache_queries(_total)?"}',
+                "vllm:prefix_cache_queries_total",
                 "increase",
                 "counter",
                 self.metric_filters,
@@ -517,43 +519,43 @@ class vLLMModelServerClient(openAIModelServerClient):
             ),
             # Token Cache Stats
             prompt_tokens_cached=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:prompt_tokens_cached(_total)?"}',
+                "vllm:prompt_tokens_cached_total",
                 "increase",
                 "counter",
                 self.metric_filters,
             ),
             prompt_tokens_recomputed=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:prompt_tokens_recomputed(_total)?"}',
+                "vllm:prompt_tokens_recomputed_total",
                 "increase",
                 "counter",
                 self.metric_filters,
             ),
             external_prefix_cache_hits=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:external_prefix_cache_hits(_total)?"}',
+                "vllm:external_prefix_cache_hits_total",
                 "increase",
                 "counter",
                 self.metric_filters,
             ),
             external_prefix_cache_queries=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:external_prefix_cache_queries(_total)?"}',
+                "vllm:external_prefix_cache_queries_total",
                 "increase",
                 "counter",
                 self.metric_filters,
             ),
             mm_cache_hits=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:mm_cache_hits(_total)?"}',
+                "vllm:mm_cache_hits_total",
                 "increase",
                 "counter",
                 self.metric_filters,
             ),
             mm_cache_queries=ModelServerPrometheusMetric(
-                '{__name__=~"vllm:mm_cache_queries(_total)?"}',
+                "vllm:mm_cache_queries_total",
                 "increase",
                 "counter",
                 self.metric_filters,
             ),
             corrupted_requests=ModelServerPrometheusMetric(
-                "vllm:corrupted_requests",
+                "vllm:corrupted_requests_total",
                 "increase",
                 "counter",
                 self.metric_filters,
