@@ -335,7 +335,12 @@ class PrometheusMetricsClient(MetricsClient):
         query_result = 0.0
         try:
             logger.debug(f"making PromQL query: '{query}'")
-            response = requests.get(self.query_url, headers=self.get_headers(), params={"query": query, "time": eval_time})
+            response = requests.get(
+                self.query_url,
+                headers=self.get_headers(),
+                params={"query": query, "time": eval_time},
+                timeout=60,
+            )
             if response is None:
                 logger.error("error executing query: %s" % (query))
                 return query_result
