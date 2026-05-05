@@ -37,10 +37,15 @@ class GoogleManagedPrometheusMetricsClient(PrometheusMetricsClient):
         super().__init__(config)
 
     def get_headers(self) -> dict[str, Any]:
-        # Prepare an authentication request - helps format the request auth token
-        auth_req = google.auth.transport.requests.Request()  # type: ignore[no-untyped-call,unused-ignore]
-
-        self.credentials.refresh(auth_req)  # type: ignore[no-untyped-call,unused-ignore]
+        # Refresh the token only when missing or expired. Previously every
+        # PromQL query triggered credentials.refresh() — a synchronous HTTP
+        # call to Google's auth endpoint with no timeout, so any single slow
+        # refresh would hang the whole job. Multi-stage runs made this much
+        # worse (~240 queries → ~240 refreshes vs ~30 for a single-stage run).
+        # Tokens stay valid ~1h, plenty for a benchmark.
+        if not self.credentials.valid:
+            auth_req = google.auth.transport.requests.Request()  # type: ignore[no-untyped-call,unused-ignore]
+            self.credentials.refresh(auth_req)  # type: ignore[no-untyped-call,unused-ignore]
         if not self.credentials.token:
             raise Exception("Failed to get credentials token")
         return {"Authorization": "Bearer " + self.credentials.token}
