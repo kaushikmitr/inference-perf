@@ -116,12 +116,6 @@ class PrometheusQueryBuilder:
 
         queries = {
             "gauge": {
-                # Per-series operations: each returns a vector with one element per
-                # series (e.g. one per pod × model). The query executor stores only
-                # the first element of the result vector, so for multi-replica
-                # deployments these effectively report "value on whichever pod
-                # Prometheus returned first" rather than a cluster-wide aggregate.
-                # Use the cluster-aggregated variants below for multi-replica setups.
                 "mean": "avg_over_time(%s{%s}[%.0fs])" % (metric_name, filter, self.duration),
                 "median": "quantile_over_time(0.5, %s{%s}[%.0fs])" % (metric_name, filter, self.duration),
                 "sd": "stddev_over_time(%s{%s}[%.0fs])" % (metric_name, filter, self.duration),
@@ -129,14 +123,6 @@ class PrometheusQueryBuilder:
                 "max": "max_over_time(%s{%s}[%.0fs])" % (metric_name, filter, self.duration),
                 "p90": "quantile_over_time(0.9, %s{%s}[%.0fs])" % (metric_name, filter, self.duration),
                 "p99": "quantile_over_time(0.99, %s{%s}[%.0fs])" % (metric_name, filter, self.duration),
-                # Cluster-aggregating variants. Use these for gauges that should
-                # be reported as a cluster-wide value rather than per-pod.
-                #   sum_*  → cluster-wide totals     (e.g. queue depth, running concurrency)
-                #   avg_*  → cluster-wide per-pod averages (e.g. KV-cache utilization %)
-                "sum_mean": "sum(avg_over_time(%s{%s}[%.0fs]))" % (metric_name, filter, self.duration),
-                "sum_max":  "sum(max_over_time(%s{%s}[%.0fs]))" % (metric_name, filter, self.duration),
-                "avg_mean": "avg(avg_over_time(%s{%s}[%.0fs]))" % (metric_name, filter, self.duration),
-                "avg_max":  "avg(max_over_time(%s{%s}[%.0fs]))" % (metric_name, filter, self.duration),
             },
             "histogram": {
                 "mean": "sum(rate(%s_sum{%s}[%.0fs])) / (sum(rate(%s_count{%s}[%.0fs])) > 0)"
@@ -177,10 +163,6 @@ class PrometheusQueryBuilder:
                 "max": "max_over_time(%s[%.0fs])" % (selector, self.duration),
                 "p90": "quantile_over_time(0.9, %s[%.0fs])" % (selector, self.duration),
                 "p99": "quantile_over_time(0.99, %s[%.0fs])" % (selector, self.duration),
-                "sum_mean": "sum(avg_over_time(%s[%.0fs]))" % (selector, self.duration),
-                "sum_max":  "sum(max_over_time(%s[%.0fs]))" % (selector, self.duration),
-                "avg_mean": "avg(avg_over_time(%s[%.0fs]))" % (selector, self.duration),
-                "avg_max":  "avg(max_over_time(%s[%.0fs]))" % (selector, self.duration),
             }
             queries["counter"] = {
                 "rate": "sum(rate(%s[%.0fs]))" % (selector, self.duration),
