@@ -42,6 +42,7 @@ from asyncio import (
     sleep,
     set_event_loop_policy,
     get_event_loop,
+    wait,
 )
 import sys
 
@@ -248,7 +249,22 @@ class Worker(mp.Process):
                     await sleep(0)
                 logger.debug(f"[Worker {self.id}] done cancelling")
             if not self.request_phase.is_set():
-                await gather(*tasks)
+                # Bounded drain. Single hung in-flight task (e.g. aiohttp
+                # waiting on an SSE stream that vLLM never closes, or a
+                # session lock that wasn't released) used to block gather()
+                # forever, which then blocks the stage_barrier and the whole
+                # cluster. Wait up to 180s for tasks to complete naturally;
+                # anything still pending gets cancelled so the worker can
+                # reach the barrier and the next stage can start.
+                if tasks:
+                    done, pending = await wait(tasks, timeout=180)
+                    if pending:
+                        for t in pending:
+                            t.cancel()
+                        await gather(*pending, return_exceptions=True)
+                        logger.warning(
+                            f"[Worker {self.id}] cancelled {len(pending)} hung tasks at stage end"
+                        )
                 tasks = []
                 LocalUserSession.clear_instances()
                 if self.stage_barrier:
