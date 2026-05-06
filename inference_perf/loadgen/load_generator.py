@@ -57,6 +57,7 @@ from typing import List, Tuple, Optional, NamedTuple, Union, Set, Dict
 from types import FrameType
 import time
 import multiprocessing as mp
+from threading import BrokenBarrierError
 from queue import Empty
 from multiprocessing.synchronize import Barrier as SyncBarrier, Event as SyncEvent
 from multiprocessing.sharedctypes import Synchronized
@@ -251,7 +252,15 @@ class Worker(mp.Process):
                 tasks = []
                 LocalUserSession.clear_instances()
                 if self.stage_barrier:
-                    self.stage_barrier.wait()
+                    # Bound barrier wait so a single hung worker (e.g. one with a
+                    # task in gather() that never returns) doesn't block the rest
+                    # of the cluster. On timeout, BrokenBarrierError surfaces and
+                    # we proceed; the parent + healthy workers move on, and the
+                    # stuck worker eventually gets terminated by loadgen.stop().
+                    try:
+                        self.stage_barrier.wait(timeout=600)
+                    except BrokenBarrierError:
+                        logger.warning(f"[Worker {self.id}] stage barrier broken, continuing")
                 logger.debug(f"[Worker {self.id}] waiting for next phase")
                 self.request_phase.wait()
 
@@ -1031,7 +1040,10 @@ class LoadGenerator:
                 else:
                     raise Exception(f"Stage {stage_id} has the wrong load type")
 
-                stage_barrier.wait()
+                try:
+                    stage_barrier.wait(timeout=600)
+                except BrokenBarrierError:
+                    logger.warning("Stage barrier broken (some worker did not arrive within 600s); continuing")
 
                 # If we encountered a SIGINT, we can break out of run stages loop
                 if self.interrupt_sig:
