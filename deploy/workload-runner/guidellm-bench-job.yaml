@@ -1,0 +1,93 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: guidellm-${SUFFIX}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: "gmp-test-sa"   # has GCS write via Workload Identity
+      nodeSelector:
+        cloud.google.com/gke-nodepool: "pool-3"
+      restartPolicy: Never
+      containers:
+        - name: guidellm
+          image: us-docker.pkg.dev/kaushikmitra-gke-dev/kaushikmitra-docker-repo/guidellm:latest
+          imagePullPolicy: Always
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              echo "Running guidellm benchmark: run=${RUN_NAME} c=${CONC}"
+              # Match inference-perf's distributions:
+              #  - prompt_tokens: lognormal(mean=1500, std=1200, [100,10000])
+              #    approximated via guidellm's normal-with-clip
+              #  - output_tokens: lognormal(mean=800, std=600, [50,4000])
+              #  - prefix: 8-bucket distribution approximating
+              #    uniform(15K, 120K) dynamic + 3K shared = 28K..112K total,
+              #    10 prefixes per bucket × 8 = 80 unique conversations
+              DATA=$(cat <<EOF
+              {
+                "prompt_tokens": 1500,
+                "prompt_tokens_stdev": 1200,
+                "prompt_tokens_min": 100,
+                "prompt_tokens_max": 10000,
+                "output_tokens": 800,
+                "output_tokens_stdev": 600,
+                "output_tokens_min": 50,
+                "output_tokens_max": 4000,
+                "turns": ${TURNS},
+                "prefix_buckets": [
+                  {"bucket_weight": 1, "prefix_count": 10, "prefix_tokens": 28000},
+                  {"bucket_weight": 1, "prefix_count": 10, "prefix_tokens": 40000},
+                  {"bucket_weight": 1, "prefix_count": 10, "prefix_tokens": 52000},
+                  {"bucket_weight": 1, "prefix_count": 10, "prefix_tokens": 64000},
+                  {"bucket_weight": 1, "prefix_count": 10, "prefix_tokens": 76000},
+                  {"bucket_weight": 1, "prefix_count": 10, "prefix_tokens": 88000},
+                  {"bucket_weight": 1, "prefix_count": 10, "prefix_tokens": 100000},
+                  {"bucket_weight": 1, "prefix_count": 10, "prefix_tokens": 112000}
+                ]
+              }
+              EOF
+              )
+              guidellm benchmark run \
+                --target "${TARGET_URL}" \
+                --model "${MODEL}" \
+                --request-format /v1/chat/completions \
+                --profile concurrent --rate "${CONC}" \
+                --max-requests "${MAX_REQUESTS}" \
+                --data "${DATA}" \
+                --random-seed "${RANDOM_SEED}" \
+                --output-path /tmp/result.json
+              echo "Uploading to gs://${GCS_BUCKET}/${GCS_OUTPUT_DIR}/${RUN_NAME}-c${CONC}-${SUFFIX}.json"
+              gsutil cp /tmp/result.json "gs://${GCS_BUCKET}/${GCS_OUTPUT_DIR}/${RUN_NAME}-c${CONC}-${SUFFIX}.json"
+              echo "done."
+          env:
+            - name: RUN_NAME
+              value: "${RUN_NAME}"
+            - name: CONC
+              value: "${CONC}"
+            - name: TARGET_URL
+              value: "${TARGET_URL}"
+            - name: MODEL
+              value: "${MODEL}"
+            - name: MAX_REQUESTS
+              value: "${MAX_REQUESTS}"
+            - name: TURNS
+              value: "${TURNS}"
+            - name: PREFIX_COUNT
+              value: "${PREFIX_COUNT}"
+            - name: PREFIX_TOKENS
+              value: "${PREFIX_TOKENS}"
+            - name: PROMPT_TOKENS
+              value: "${PROMPT_TOKENS}"
+            - name: OUTPUT_TOKENS
+              value: "${OUTPUT_TOKENS}"
+            - name: RANDOM_SEED
+              value: "${RANDOM_SEED}"
+            - name: GCS_BUCKET
+              value: "${GCS_BUCKET}"
+            - name: GCS_OUTPUT_DIR
+              value: "${GCS_OUTPUT_DIR}"
+            - name: SUFFIX
+              value: "${SUFFIX}"

@@ -1,0 +1,46 @@
+load:
+  type: concurrent
+  num_workers: 6
+  stages:
+    - num_requests: 200
+      concurrency_level: 8
+    - num_requests: 600
+      concurrency_level: 64
+    - num_requests: 1000
+      concurrency_level: 128
+    - num_requests: 2100
+      concurrency_level: 256
+    - num_requests: 4100
+      concurrency_level: 512
+    - num_requests: 6100
+      concurrency_level: 768
+    - num_requests: 8000
+      concurrency_level: 1000
+api:
+  type: completion
+  streaming: true
+server:
+  type: vllm
+  model_name: google/gemma-3-1b-it
+  base_url: http://localhost:8000
+data:
+  type: conversation_replay
+  conversation_replay:
+    seed: 42
+    num_conversations: 1000
+    shared_system_prompt_len: 2000
+    turns_per_conversation:
+      type: fixed
+      mean: 1
+    input_tokens_per_turn:
+      type: lognormal
+      min: 50
+      max: 15000
+      mean: 500
+      std_dev: 1200
+    output_tokens_per_turn:
+      type: uniform
+      min: 500
+      max: 8000
+      mean: 4000
+      std_dev: 2500

@@ -1,0 +1,111 @@
+# Helm values for the existing standalone Prometheus in wva-monitoring ns.
+# This adds a `vllm-decode-pods` scrape job for the optimized-baseline vLLM
+# decode pods (selector: llm-d.ai/role=decode), giving inference-perf a
+# non-GMP Prometheus URL to query.
+#
+# Apply:
+#   helm upgrade prometheus prometheus-community/prometheus \
+#     -n wva-monitoring \
+#     -f deploy/workload-runner/prometheus-values.yaml
+#
+# After apply, point inference-perf at:
+#   http://prometheus-server.wva-monitoring.svc.cluster.local:80
+# and set google_managed: false in the metrics section.
+
+alertmanager:
+  enabled: false
+
+kube-state-metrics:
+  enabled: false
+
+prometheus-node-exporter:
+  enabled: false
+
+prometheus-pushgateway:
+  enabled: false
+
+server:
+  persistentVolume:
+    enabled: false
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      memory: 512Mi
+
+extraScrapeConfigs: |
+  - job_name: epp-metrics
+    scheme: http
+    scrape_interval: 5s
+    authorization:
+      type: Bearer
+      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    static_configs:
+      - targets:
+          - vllm-llama3-8b-instruct-epp.default.svc.cluster.local:9090
+
+  - job_name: wva-metrics
+    scheme: https
+    scrape_interval: 5s
+    tls_config:
+      insecure_skip_verify: true
+    authorization:
+      type: Bearer
+      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [workload-variant-autoscaler-system]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_control_plane]
+        regex: controller-manager
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: https
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  - job_name: vllm-pods
+    scheme: http
+    scrape_interval: 10s
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [default]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: vllm-llama3-8b-instruct
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        regex: "8000"
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  # vLLM decode pods used by the saturation-sweep benchmark.
+  # Selector matches pods with label llm-d.ai/role=decode (the optimized-baseline
+  # nvidia-gpu-vllm-decode replicas serving Qwen3-32B). Keeps only the named
+  # `modelserver` port (8000) so we don't double-scrape sidecars.
+  - job_name: vllm-decode-pods
+    scheme: http
+    scrape_interval: 10s
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [default]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_llm_d_ai_role]
+        regex: decode
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: modelserver
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
